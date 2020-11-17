@@ -14,11 +14,40 @@ from ..utils.timer import Timer, get_time_str
 from .bbox_aug import im_detect_bbox_aug
 
 
-def compute_on_dataset(model, data_loader, device, bbox_aug, timer=None):
+def compute_on_dataset(model, data_loader, device, bbox_aug, timer=None, jit=False, int8=False, calibration=False, configure_dir='configure.json', iterations=0, iter_calib=0):
     model.eval()
     results_dict = {}
     cpu_device = torch.device("cpu")
-    for _, batch in enumerate(tqdm(data_loader)):
+    # generate trace model
+    if jit:
+        print("generate trace model")
+        for i, batch in enumerate(tqdm(data_loader)):
+            images, targets, image_ids = batch
+            with torch.no_grad():
+                images = images.to(device)
+                traced_backbone = model(images, trace=True)
+                break
+
+    # Int8 Calibration
+    if device.type == 'dpcpp' and int8 and calibration:
+        import intel_pytorch_extension as ipex
+        print("runing int8 calibration step")
+        conf = ipex.AmpConf(torch.int8)
+        for i, batch in enumerate(tqdm(data_loader)):
+            images, targets, image_ids = batch
+            with torch.no_grad():
+                images = images.to(device)
+                with ipex.AutoMixPrecision(conf, running_mode="calibration"):
+                    if jit:
+                        output = model(images, traced_backbone=traced_backbone)
+                    else:
+                        output = model(images)
+                if iter_calib != 0 and i == iter_calib - 1:
+                    break
+        conf.save(configure_dir)
+    # Inference
+    print("runing inference step")
+    for i, batch in enumerate(tqdm(data_loader)):
         images, targets, image_ids = batch
         with torch.no_grad():
             if timer:
@@ -26,15 +55,30 @@ def compute_on_dataset(model, data_loader, device, bbox_aug, timer=None):
             if bbox_aug:
                 output = im_detect_bbox_aug(model, images, device)
             else:
-                output = model(images.to(device))
+                images = images.to(device)
+                if device.type == 'dpcpp' and int8:
+                    import intel_pytorch_extension as ipex
+                    conf = ipex.AmpConf(torch.int8, configure_dir)
+                    with ipex.AutoMixPrecision(conf, running_mode="inference"):
+                        if jit:
+                            output = model(images, traced_backbone=traced_backbone)
+                        else:
+                            output = model(images)
+                else:
+                    if jit:
+                        output = model(images, traced_backbone=traced_backbone)
+                    else:
+                        output = model(images)
             if timer:
-                if not device.type == 'cpu':
+                if not (device.type == 'cpu' or device.type == 'dpcpp'):
                     torch.cuda.synchronize()
                 timer.toc()
             output = [o.to(cpu_device) for o in output]
         results_dict.update(
             {img_id: result for img_id, result in zip(image_ids, output)}
         )
+        if iterations != 0 and i == iterations - 1:
+            break
     return results_dict
 
 
@@ -71,6 +115,12 @@ def inference(
         expected_results=(),
         expected_results_sigma_tol=4,
         output_folder=None,
+        jit=False,
+        int8=False,
+        calibration=False,
+        configure_dir='configure.json',
+        iterations=0,
+        iter_calib=0
 ):
     # convert to a torch.device for efficiency
     device = torch.device(device)
@@ -81,7 +131,7 @@ def inference(
     total_timer = Timer()
     inference_timer = Timer()
     total_timer.tic()
-    predictions = compute_on_dataset(model, data_loader, device, bbox_aug, inference_timer)
+    predictions = compute_on_dataset(model, data_loader, device, bbox_aug, inference_timer, jit, int8, calibration, configure_dir, iterations, iter_calib)
     # wait for all processes to complete before measuring the time
     synchronize()
     total_time = total_timer.toc()

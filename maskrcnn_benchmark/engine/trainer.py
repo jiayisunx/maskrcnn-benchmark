@@ -13,8 +13,6 @@ from maskrcnn_benchmark.utils.comm import get_world_size, synchronize
 from maskrcnn_benchmark.utils.metric_logger import MetricLogger
 from maskrcnn_benchmark.engine.inference import inference
 
-from apex import amp
-
 def reduce_loss_dict(loss_dict):
     """
     Reduce the loss dictionary from all processes so that process with rank
@@ -93,8 +91,7 @@ def do_train(
         optimizer.zero_grad()
         # Note: If mixed precision is not used, this ends up doing nothing
         # Otherwise apply loss scaling for mixed-precision recipe
-        with amp.scale_loss(losses, optimizer) as scaled_losses:
-            scaled_losses.backward()
+        losses.backward()
         optimizer.step()
         scheduler.step()
 
@@ -113,14 +110,14 @@ def do_train(
                         "iter: {iter}",
                         "{meters}",
                         "lr: {lr:.6f}",
-                        "max mem: {memory:.0f}",
+                        #"max mem: {memory:.0f}",
                     ]
                 ).format(
                     eta=eta_string,
                     iter=iteration,
                     meters=str(meters),
                     lr=optimizer.param_groups[0]["lr"],
-                    memory=torch.cuda.max_memory_allocated() / 1024.0 / 1024.0,
+                    #memory=torch.cuda.max_memory_allocated() / 1024.0 / 1024.0,
                 )
             )
         if iteration % checkpoint_period == 0:

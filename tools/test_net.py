@@ -17,13 +17,6 @@ from maskrcnn_benchmark.utils.comm import synchronize, get_rank
 from maskrcnn_benchmark.utils.logger import setup_logger
 from maskrcnn_benchmark.utils.miscellaneous import mkdir
 
-# Check if we can enable mixed-precision via apex.amp
-try:
-    from apex import amp
-except ImportError:
-    raise ImportError('Use APEX for mixed precision via apex.amp')
-
-
 def main():
     parser = argparse.ArgumentParser(description="PyTorch Object Detection Inference")
     parser.add_argument(
@@ -44,8 +37,39 @@ def main():
         default=None,
         nargs=argparse.REMAINDER,
     )
+    parser.add_argument('--ipex', action='store_true', default=False,
+                        help='enable Intel_PyTorch_Extension')
+    parser.add_argument('--dnnl', action='store_true', default=False,
+                        help='enable Intel_PyTorch_Extension auto dnnl path')
+    parser.add_argument('--mix-precision', action='store_true', default=False,
+                        help='enable ipex mix precision')
+    parser.add_argument('--jit', action='store_true', default=False,
+                        help='enable Intel_PyTorch_Extension JIT path')
+    parser.add_argument("--int8", action='store_true', help='use int8', default=False)
+    parser.add_argument('--calibration', action='store_true', default=False,
+                        help='doing int8 calibration step')
+    parser.add_argument('--configure-dir', default='configure.json', type=str, metavar='PATH',
+                        help = 'path to int8 configures, default file name is configure.json')
+    parser.add_argument('-i', '--iterations', default=0, type=int, metavar='N',
+                        help='number of total iterations to run')
+    parser.add_argument('--iter-calib', default=0, type=int, metavar='N',
+                        help='number of iterations when calibration to run')
 
     args = parser.parse_args()
+
+    if args.ipex:
+        import intel_pytorch_extension as ipex
+        if args.dnnl:
+            ipex.core.enable_auto_dnnl()
+        else:
+            ipex.core.disable_auto_dnnl()
+        if args.mix_precision:
+            ipex.enable_auto_mixed_precision(mixed_dtype=torch.bfloat16, train=False)
+        # jit path only enabled for inference
+        if args.jit:
+            ipex.core.enable_jit_opt()
+        else:
+            ipex.core.disable_jit_opt()
 
     num_gpus = int(os.environ["WORLD_SIZE"]) if "WORLD_SIZE" in os.environ else 1
     distributed = num_gpus > 1
@@ -70,11 +94,13 @@ def main():
     logger.info("\n" + collect_env_info())
 
     model = build_detection_model(cfg)
+
+    if args.ipex:
+        cfg.merge_from_list(["MODEL.DEVICE", "dpcpp"])
+
     model.to(cfg.MODEL.DEVICE)
 
-    # Initialize mixed-precision if necessary
-    use_mixed_precision = cfg.DTYPE == 'float16'
-    amp_handle = amp.init(enabled=use_mixed_precision, verbose=cfg.AMP_VERBOSE)
+    print(model)
 
     output_dir = cfg.OUTPUT_DIR
     checkpointer = DetectronCheckpointer(cfg, model, save_dir=output_dir)
@@ -106,6 +132,12 @@ def main():
             expected_results=cfg.TEST.EXPECTED_RESULTS,
             expected_results_sigma_tol=cfg.TEST.EXPECTED_RESULTS_SIGMA_TOL,
             output_folder=output_folder,
+            jit=args.jit,
+            int8=args.int8,
+            calibration=args.calibration,
+            configure_dir=args.configure_dir,
+            iterations=args.iterations,
+            iter_calib=args.iter_calib
         )
         synchronize()
 
