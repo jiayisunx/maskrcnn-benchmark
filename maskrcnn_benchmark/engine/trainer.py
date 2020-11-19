@@ -50,11 +50,14 @@ def do_train(
     checkpoint_period,
     test_period,
     arguments,
+    iterations,
 ):
     logger = logging.getLogger("maskrcnn_benchmark.trainer")
     logger.info("Start training")
     meters = MetricLogger(delimiter="  ")
     max_iter = len(data_loader)
+    if iterations != 0:
+        max_iter = iterations
     start_iter = arguments["iteration"]
     model.train()
     start_training_time = time.time()
@@ -170,7 +173,8 @@ def do_train(
                 )
             )
         if iteration == max_iter:
-            checkpointer.save("model_final", **arguments)
+            break
+            #checkpointer.save("model_final", **arguments)
 
     total_training_time = time.time() - start_training_time
     total_time_str = str(datetime.timedelta(seconds=total_training_time))

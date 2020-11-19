@@ -25,7 +25,7 @@ from maskrcnn_benchmark.utils.imports import import_file
 from maskrcnn_benchmark.utils.logger import setup_logger
 from maskrcnn_benchmark.utils.miscellaneous import mkdir, save_config
 
-def train(cfg, local_rank, distributed):
+def train(cfg, local_rank, distributed, iterations):
     model = build_detection_model(cfg)
     device = torch.device(cfg.MODEL.DEVICE)
     model.to(device)
@@ -79,6 +79,7 @@ def train(cfg, local_rank, distributed):
         checkpoint_period,
         test_period,
         arguments,
+        iterations,
     )
 
     return model
@@ -145,6 +146,8 @@ def main():
                         help='enable Intel_PyTorch_Extension auto dnnl path')
     parser.add_argument('--mix-precision', action='store_true', default=False,
                         help='enable ipex mix precision')
+    parser.add_argument('-i', '--iterations', default=0, type=int, metavar='N',
+                        help='number of total iterations to run')
     args = parser.parse_args()
 
     if args.ipex:
@@ -195,7 +198,7 @@ def main():
     # save overloaded model config in the output directory
     save_config(cfg, output_config_path)
 
-    model = train(cfg, args.local_rank, args.distributed)
+    model = train(cfg, args.local_rank, args.distributed, args.iterations)
 
     if not args.skip_test:
         run_test(cfg, model, args.distributed)
