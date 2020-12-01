@@ -96,7 +96,7 @@ def main():
     model = build_detection_model(cfg)
 
     if args.ipex:
-        cfg.merge_from_list(["MODEL.DEVICE", "dpcpp"])
+        cfg.merge_from_list(["MODEL.DEVICE", ipex.DEVICE])
 
     model.to(cfg.MODEL.DEVICE)
 

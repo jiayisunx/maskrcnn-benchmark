@@ -29,7 +29,7 @@ def compute_on_dataset(model, data_loader, device, bbox_aug, timer=None, jit=Fal
                 break
 
     # Int8 Calibration
-    if device.type == 'dpcpp' and int8 and calibration:
+    if int8 and calibration:
         import intel_pytorch_extension as ipex
         print("runing int8 calibration step")
         conf = ipex.AmpConf(torch.int8)
@@ -56,7 +56,7 @@ def compute_on_dataset(model, data_loader, device, bbox_aug, timer=None, jit=Fal
                 output = im_detect_bbox_aug(model, images, device)
             else:
                 images = images.to(device)
-                if device.type == 'dpcpp' and int8:
+                if int8:
                     import intel_pytorch_extension as ipex
                     conf = ipex.AmpConf(torch.int8, configure_dir)
                     with ipex.AutoMixPrecision(conf, running_mode="inference"):
@@ -70,7 +70,7 @@ def compute_on_dataset(model, data_loader, device, bbox_aug, timer=None, jit=Fal
                     else:
                         output = model(images)
             if timer:
-                if not (device.type == 'cpu' or device.type == 'dpcpp'):
+                if device.type == 'cuda':
                     torch.cuda.synchronize()
                 timer.toc()
             output = [o.to(cpu_device) for o in output]

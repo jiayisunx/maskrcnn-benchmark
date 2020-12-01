@@ -191,7 +191,7 @@ def main():
     logger.info("Running with config:\n{}".format(cfg))
 
     if args.ipex:
-        cfg.merge_from_list(["MODEL.DEVICE", "dpcpp"])
+        cfg.merge_from_list(["MODEL.DEVICE", ipex.DEVICE])
 
     output_config_path = os.path.join(cfg.OUTPUT_DIR, 'config.yml')
     logger.info("Saving config into: {}".format(output_config_path))
