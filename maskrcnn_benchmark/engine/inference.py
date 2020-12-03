@@ -137,15 +137,15 @@ def inference(
     total_time = total_timer.toc()
     total_time_str = get_time_str(total_time)
     logger.info(
-        "Total run time: {} ({} s / img per device, on {} devices)".format(
-            total_time_str, total_time * num_devices / len(dataset), num_devices
+        "Total run time: {} ({} s / iter per device, on {} devices)".format(
+            total_time_str, total_time * num_devices / iterations, num_devices
         )
     )
     total_infer_time = get_time_str(inference_timer.total_time)
     logger.info(
-        "Model inference time: {} ({} s / img per device, on {} devices)".format(
+        "Model inference time: {} ({} s / iter per device, on {} devices)".format(
             total_infer_time,
-            inference_timer.total_time * num_devices / len(dataset),
+            inference_timer.total_time * num_devices / iterations,
             num_devices,
         )
     )
