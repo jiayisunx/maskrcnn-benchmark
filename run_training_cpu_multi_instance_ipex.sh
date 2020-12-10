@@ -42,7 +42,7 @@ for i in $(seq 1 $LAST_INSTANCE); do
 
     echo "### running on instance $i, numa node $numa_node_i, core list {$start_core_i, $end_core_i}..."
     numactl --physcpubind=$start_core_i-$end_core_i --membind=$numa_node_i python tools/train_net.py --config-file "configs/e2e_mask_rcnn_R_50_FPN_1x_coco2017_tra.yaml" --skip-test -i 100 --ipex $ARGS\
-        SOLVER.IMS_PER_BATCH 2 TEST.IMS_PER_BATCH 1 SOLVER.MAX_ITER 720000 SOLVER.STEPS "(480000, 640000)" SOLVER.BASE_LR 0.0025 MODEL.DEVICE cpu 2>&1 | tee $LOG_i &
+        SOLVER.IMS_PER_BATCH 16 TEST.IMS_PER_BATCH 1 SOLVER.MAX_ITER 720000 SOLVER.STEPS "(480000, 640000)" SOLVER.BASE_LR 0.0025 MODEL.DEVICE cpu 2>&1 | tee $LOG_i &
 done
 
 numa_node_0=0
@@ -52,4 +52,4 @@ LOG_0=training_ipex_ins0.txt
 
 echo "### running on instance 0, numa node $numa_node_0, core list {$start_core_0, $end_core_0}...\n\n"
 numactl --physcpubind=$start_core_0-$end_core_0 --membind=$numa_node_0 python tools/train_net.py --config-file "configs/e2e_mask_rcnn_R_50_FPN_1x_coco2017_tra.yaml" --skip-test -i 100 --ipex $ARGS\
-        SOLVER.IMS_PER_BATCH 2 TEST.IMS_PER_BATCH 1 SOLVER.MAX_ITER 720000 SOLVER.STEPS "(480000, 640000)" SOLVER.BASE_LR 0.0025 MODEL.DEVICE cpu 2>&1 | tee $LOG_0
+        SOLVER.IMS_PER_BATCH 16 TEST.IMS_PER_BATCH 1 SOLVER.MAX_ITER 720000 SOLVER.STEPS "(480000, 640000)" SOLVER.BASE_LR 0.0025 MODEL.DEVICE cpu 2>&1 | tee $LOG_0
