@@ -14,6 +14,8 @@ KMP_SETTING="KMP_AFFINITY=granularity=fine,compact,1,0"
 export OMP_NUM_THREADS=$CORES_PER_INSTANCE
 export $KMP_SETTING
 
+export TRAIN=0
+
 echo -e "### using OMP_NUM_THREADS=$CORES_PER_INSTANCE"
 echo -e "### using $KMP_SETTING\n\n"
 sleep 3

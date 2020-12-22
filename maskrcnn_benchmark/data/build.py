@@ -170,7 +170,7 @@ def make_data_loader(cfg, is_train=True, is_distributed=False, start_iter=0, is_
         num_workers = cfg.DATALOADER.NUM_WORKERS
         data_loader = torch.utils.data.DataLoader(
             dataset,
-            num_workers=num_workers,
+            num_workers=0,
             batch_sampler=batch_sampler,
             collate_fn=collator,
         )

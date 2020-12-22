@@ -22,7 +22,12 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from torch.nn import BatchNorm2d as FrozenBatchNorm2d
+import os
+if os.environ.get('TRAIN') == "1":
+    from intel_pytorch_extension import FrozenBatchNorm2d
+else:
+    from torch.nn import BatchNorm2d as FrozenBatchNorm2d
+
 from torch.nn import Conv2d
 from maskrcnn_benchmark.layers import DFConv2d
 from maskrcnn_benchmark.modeling.make_layers import group_norm

@@ -1,11 +1,4 @@
 #!/bin/bash
-
-pushd pytorch
-export PROFILE=0 #used to control profile, open(1) and close(0)
-export USE_MKLDNN=0 #used to enable MKLDNN OP, MKLDNN(1), CPU(0)
-
-PROFILE_DIR='./log/' #used to save profile log.
-
 export DNNL_PRIMITIVE_CACHE_CAPACITY=1024
 
 ARGS=""
@@ -43,7 +36,4 @@ sleep 3
 
 ### inference ###
 export TRAIN=0
-PROFILE_DIR='./log/infer/'
-time python tools/test_net.py --config-file "configs/e2e_mask_rcnn_R_50_FPN_1x_coco2017_inf.yaml" --ipex $ARGS TEST.IMS_PER_BATCH 2 MODEL.DEVICE cpu
-
-popd
+python tools/test_net.py --config-file "configs/e2e_mask_rcnn_R_50_FPN_1x_coco2017_inf.yaml" --ipex $ARGS TEST.IMS_PER_BATCH 2 MODEL.DEVICE cpu

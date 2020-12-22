@@ -56,9 +56,9 @@ def do_train(
     logger.info("Start training")
     meters = MetricLogger(delimiter="  ")
     max_iter = len(data_loader)
-    if iterations != 0:
-        max_iter = iterations
     start_iter = arguments["iteration"]
+    if iterations != 0:
+        max_iter = iterations + start_iter
     model.train()
     start_training_time = time.time()
     end = time.time()
@@ -82,6 +82,8 @@ def do_train(
         images = images.to(device)
         targets = [target.to(device) for target in targets]
 
+        start_time = time.time()
+
         loss_dict = model(images, targets)
 
         losses = sum(loss for loss in loss_dict.values())
@@ -98,7 +100,7 @@ def do_train(
         optimizer.step()
         scheduler.step()
 
-        batch_time = time.time() - end
+        batch_time = time.time() - start_time
         end = time.time()
         meters.update(time=batch_time, data=data_time)
 
@@ -175,6 +177,8 @@ def do_train(
         if iteration == max_iter:
             break
             #checkpointer.save("model_final", **arguments)
+
+    print('training performance %3.3f fps on %d iterations'%(cfg.SOLVER.IMS_PER_BATCH/meters.time.global_avg, iterations))
 
     total_training_time = time.time() - start_training_time
     total_time_str = str(datetime.timedelta(seconds=total_training_time))
