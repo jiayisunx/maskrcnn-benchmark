@@ -136,6 +136,10 @@ def inference(
     synchronize()
     total_time = total_timer.toc()
     total_time_str = get_time_str(total_time)
+
+    if iterations == 0:
+        iterations = len(dataset)
+
     logger.info(
         "Total run time: {} ({} s / iter per device, on {} devices)".format(
             total_time_str, total_time * num_devices / iterations, num_devices

@@ -178,12 +178,12 @@ def do_train(
             break
             #checkpointer.save("model_final", **arguments)
 
-    print('training performance %3.3f fps on %d iterations'%(cfg.SOLVER.IMS_PER_BATCH/meters.time.global_avg, iterations))
+    print('training performance %3.3f fps on %d iterations'%(cfg.SOLVER.IMS_PER_BATCH/meters.time.global_avg, max_iter - start_iter))
 
     total_training_time = time.time() - start_training_time
     total_time_str = str(datetime.timedelta(seconds=total_training_time))
     logger.info(
         "Total training time: {} ({:.4f} s / it)".format(
-            total_time_str, total_training_time / (max_iter)
+            total_time_str, total_training_time / (max_iter - start_iter)
         )
     )
