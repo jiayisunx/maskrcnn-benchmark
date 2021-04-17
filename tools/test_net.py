@@ -44,6 +44,13 @@ def main():
         default=None,
         nargs=argparse.REMAINDER,
     )
+    parser.add_argument('--bf16', action='store_true', default=False,
+                        help='enable BF16 by IPEX autocast')
+    parser.add_argument('--jit', action='store_true', default=False,
+                        help='enable IPEX JIT path')
+    parser.add_argument('-i', '--iterations', default=-1, type=int, metavar='N',
+                        help='number of total iterations to run')
+    parser.add_argument("--enable-profiling", action="store_true", default=False)
 
     args = parser.parse_args()
 
@@ -94,20 +101,28 @@ def main():
             mkdir(output_folder)
             output_folders[idx] = output_folder
     data_loaders_val = make_data_loader(cfg, is_train=False, is_distributed=distributed)
-    for output_folder, dataset_name, data_loader_val in zip(output_folders, dataset_names, data_loaders_val):
-        inference(
-            model,
-            data_loader_val,
-            dataset_name=dataset_name,
-            iou_types=iou_types,
-            box_only=False if cfg.MODEL.RETINANET_ON else cfg.MODEL.RPN_ONLY,
-            bbox_aug=cfg.TEST.BBOX_AUG.ENABLED,
-            device=cfg.MODEL.DEVICE,
-            expected_results=cfg.TEST.EXPECTED_RESULTS,
-            expected_results_sigma_tol=cfg.TEST.EXPECTED_RESULTS_SIGMA_TOL,
-            output_folder=output_folder,
-        )
-        synchronize()
+    with torch.autograd.profiler.profile(args.enable_profiling) as prof:
+        for output_folder, dataset_name, data_loader_val in zip(output_folders, dataset_names, data_loaders_val):
+            inference(
+                model,
+                data_loader_val,
+                dataset_name=dataset_name,
+                iou_types=iou_types,
+                box_only=False if cfg.MODEL.RETINANET_ON else cfg.MODEL.RPN_ONLY,
+                bbox_aug=cfg.TEST.BBOX_AUG.ENABLED,
+                device=cfg.MODEL.DEVICE,
+                expected_results=cfg.TEST.EXPECTED_RESULTS,
+                expected_results_sigma_tol=cfg.TEST.EXPECTED_RESULTS_SIGMA_TOL,
+                output_folder=output_folder,
+                bf16=args.bf16,
+                jit=args.jit,
+                iterations=args.iterations
+            )
+            synchronize()
+    if args.enable_profiling:
+        print(prof.key_averages().table(sort_by="cpu_time_total"))
+
+
 
 
 if __name__ == "__main__":

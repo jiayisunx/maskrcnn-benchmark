@@ -11,6 +11,7 @@ from maskrcnn_benchmark.structures.image_list import to_image_list
 from ..backbone import build_backbone
 from ..rpn.rpn import build_rpn
 from ..roi_heads.roi_heads import build_roi_heads
+import intel_pytorch_extension as ipex
 
 
 class GeneralizedRCNN(nn.Module):
@@ -30,7 +31,7 @@ class GeneralizedRCNN(nn.Module):
         self.rpn = build_rpn(cfg, self.backbone.out_channels)
         self.roi_heads = build_roi_heads(cfg, self.backbone.out_channels)
 
-    def forward(self, images, targets=None):
+    def forward(self, images, targets=None, bf16=False):
         """
         Arguments:
             images (list[Tensor] or ImageList): images to be processed
@@ -46,13 +47,15 @@ class GeneralizedRCNN(nn.Module):
         if self.training and targets is None:
             raise ValueError("In training mode, targets should be passed")
         images = to_image_list(images)
-        features = self.backbone(images.tensors)
-        proposals, proposal_losses = self.rpn(images, features, targets)
+        with ipex.amp.autocast(enabled=bf16, configure=ipex.conf.AmpConf(torch.bfloat16)):
+            features = self.backbone(images.tensors)
+        features_fp32 = tuple(f.to(torch.float32) for f in features)
+        proposals, proposal_losses = self.rpn(images, features_fp32, targets)
         if self.roi_heads:
-            x, result, detector_losses = self.roi_heads(features, proposals, targets)
+            x, result, detector_losses = self.roi_heads(features_fp32, proposals, targets)
         else:
             # RPN-only models don't have roi_heads
-            x = features
+            x = features_fp32
             result = proposals
             detector_losses = {}
 

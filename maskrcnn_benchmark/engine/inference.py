@@ -12,13 +12,28 @@ from ..utils.comm import all_gather
 from ..utils.comm import synchronize
 from ..utils.timer import Timer, get_time_str
 from .bbox_aug import im_detect_bbox_aug
+import intel_pytorch_extension as ipex
 
 
-def compute_on_dataset(model, data_loader, device, bbox_aug, timer=None):
+def compute_on_dataset(model, data_loader, device, bbox_aug, timer=None, bf16=False, jit=False, iterations=-1):
     model.eval()
     results_dict = {}
     cpu_device = torch.device("cpu")
-    for _, batch in enumerate(tqdm(data_loader)):
+    model = model.to(memory_format=torch.channels_last)
+    with ipex.amp.autocast(enabled=bf16, configure=ipex.conf.AmpConf(torch.bfloat16)):
+        # generate trace model
+        if jit:
+            print("generate trace model")
+            for i, batch in enumerate(tqdm(data_loader)):
+                images, targets, image_ids = batch
+                with torch.no_grad():
+                    model.backbone = torch.jit.trace(model.backbone, images.tensors.to(memory_format=torch.channels_last))
+                    trace_graph = model.backbone.graph_for(images.tensors.to(memory_format=torch.channels_last))
+                    print(trace_graph)
+                    break
+    # Inference
+    print("runing inference step")
+    for i, batch in enumerate(tqdm(data_loader)):
         images, targets, image_ids = batch
         with torch.no_grad():
             if timer:
@@ -26,7 +41,7 @@ def compute_on_dataset(model, data_loader, device, bbox_aug, timer=None):
             if bbox_aug:
                 output = im_detect_bbox_aug(model, images, device)
             else:
-                output = model(images.to(device))
+                output = model(images.to(memory_format=torch.channels_last), bf16=bf16)
             if timer:
                 if not device.type == 'cpu':
                     torch.cuda.synchronize()
@@ -35,6 +50,8 @@ def compute_on_dataset(model, data_loader, device, bbox_aug, timer=None):
         results_dict.update(
             {img_id: result for img_id, result in zip(image_ids, output)}
         )
+        if i == iterations:
+            break
     return results_dict
 
 
@@ -71,6 +88,9 @@ def inference(
         expected_results=(),
         expected_results_sigma_tol=4,
         output_folder=None,
+        bf16=False,
+        jit=False,
+        iterations=-1
 ):
     # convert to a torch.device for efficiency
     device = torch.device(device)
@@ -81,21 +101,25 @@ def inference(
     total_timer = Timer()
     inference_timer = Timer()
     total_timer.tic()
-    predictions = compute_on_dataset(model, data_loader, device, bbox_aug, inference_timer)
+    predictions = compute_on_dataset(model, data_loader, device, bbox_aug, inference_timer, bf16, jit, iterations)
     # wait for all processes to complete before measuring the time
     synchronize()
     total_time = total_timer.toc()
     total_time_str = get_time_str(total_time)
+
+    if iterations == -1:
+        iterations = len(dataset)
+
     logger.info(
-        "Total run time: {} ({} s / img per device, on {} devices)".format(
-            total_time_str, total_time * num_devices / len(dataset), num_devices
+        "Total run time: {} ({} s / iter per device, on {} devices)".format(
+            total_time_str, total_time * num_devices / iterations, num_devices
         )
     )
     total_infer_time = get_time_str(inference_timer.total_time)
     logger.info(
-        "Model inference time: {} ({} s / img per device, on {} devices)".format(
+        "Model inference time: {} ({} s / iter per device, on {} devices)".format(
             total_infer_time,
-            inference_timer.total_time * num_devices / len(dataset),
+            inference_timer.total_time * num_devices / iterations,
             num_devices,
         )
     )
