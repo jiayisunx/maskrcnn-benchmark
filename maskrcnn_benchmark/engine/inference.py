@@ -15,7 +15,7 @@ from .bbox_aug import im_detect_bbox_aug
 import intel_pytorch_extension as ipex
 
 
-def compute_on_dataset(model, data_loader, device, bbox_aug, timer=None, bf16=False, jit=False, iterations=-1):
+def compute_on_dataset(model, data_loader, device, bbox_aug, timer=None, bf16=False, jit=False, iterations=-1, enable_profiling=False):
     model.eval()
     results_dict = {}
     cpu_device = torch.device("cpu")
@@ -33,25 +33,28 @@ def compute_on_dataset(model, data_loader, device, bbox_aug, timer=None, bf16=Fa
                     break
     # Inference
     print("runing inference step")
-    for i, batch in enumerate(tqdm(data_loader)):
-        images, targets, image_ids = batch
-        with torch.no_grad():
-            if timer:
-                timer.tic()
-            if bbox_aug:
-                output = im_detect_bbox_aug(model, images, device)
-            else:
-                output = model(images.to(memory_format=torch.channels_last), bf16=bf16)
-            if timer:
-                if not device.type == 'cpu':
-                    torch.cuda.synchronize()
-                timer.toc()
-            output = [o.to(cpu_device) for o in output]
-        results_dict.update(
-            {img_id: result for img_id, result in zip(image_ids, output)}
-        )
-        if i == iterations:
-            break
+    with torch.autograd.profiler.profile(enable_profiling) as prof:
+        for i, batch in enumerate(tqdm(data_loader)):
+            images, targets, image_ids = batch
+            with torch.no_grad():
+                if timer:
+                    timer.tic()
+                if bbox_aug:
+                    output = im_detect_bbox_aug(model, images, device)
+                else:
+                    output = model(images.to(memory_format=torch.channels_last), bf16=bf16)
+                if timer:
+                    if not device.type == 'cpu':
+                        torch.cuda.synchronize()
+                    timer.toc()
+                output = [o.to(cpu_device) for o in output]
+            results_dict.update(
+                {img_id: result for img_id, result in zip(image_ids, output)}
+            )
+            if i == iterations:
+                break
+    if enable_profiling:
+        print(prof.key_averages().table(sort_by="cpu_time_total"))
     return results_dict
 
 
@@ -90,7 +93,8 @@ def inference(
         output_folder=None,
         bf16=False,
         jit=False,
-        iterations=-1
+        iterations=-1,
+        enable_profiling=False
 ):
     # convert to a torch.device for efficiency
     device = torch.device(device)
@@ -101,7 +105,7 @@ def inference(
     total_timer = Timer()
     inference_timer = Timer()
     total_timer.tic()
-    predictions = compute_on_dataset(model, data_loader, device, bbox_aug, inference_timer, bf16, jit, iterations)
+    predictions = compute_on_dataset(model, data_loader, device, bbox_aug, inference_timer, bf16, jit, iterations, enable_profiling)
     # wait for all processes to complete before measuring the time
     synchronize()
     total_time = total_timer.toc()

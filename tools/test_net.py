@@ -101,26 +101,24 @@ def main():
             mkdir(output_folder)
             output_folders[idx] = output_folder
     data_loaders_val = make_data_loader(cfg, is_train=False, is_distributed=distributed)
-    with torch.autograd.profiler.profile(args.enable_profiling) as prof:
-        for output_folder, dataset_name, data_loader_val in zip(output_folders, dataset_names, data_loaders_val):
-            inference(
-                model,
-                data_loader_val,
-                dataset_name=dataset_name,
-                iou_types=iou_types,
-                box_only=False if cfg.MODEL.RETINANET_ON else cfg.MODEL.RPN_ONLY,
-                bbox_aug=cfg.TEST.BBOX_AUG.ENABLED,
-                device=cfg.MODEL.DEVICE,
-                expected_results=cfg.TEST.EXPECTED_RESULTS,
-                expected_results_sigma_tol=cfg.TEST.EXPECTED_RESULTS_SIGMA_TOL,
-                output_folder=output_folder,
-                bf16=args.bf16,
-                jit=args.jit,
-                iterations=args.iterations
-            )
-            synchronize()
-    if args.enable_profiling:
-        print(prof.key_averages().table(sort_by="cpu_time_total"))
+    for output_folder, dataset_name, data_loader_val in zip(output_folders, dataset_names, data_loaders_val):
+        inference(
+            model,
+            data_loader_val,
+            dataset_name=dataset_name,
+            iou_types=iou_types,
+            box_only=False if cfg.MODEL.RETINANET_ON else cfg.MODEL.RPN_ONLY,
+            bbox_aug=cfg.TEST.BBOX_AUG.ENABLED,
+            device=cfg.MODEL.DEVICE,
+            expected_results=cfg.TEST.EXPECTED_RESULTS,
+            expected_results_sigma_tol=cfg.TEST.EXPECTED_RESULTS_SIGMA_TOL,
+            output_folder=output_folder,
+            bf16=args.bf16,
+            jit=args.jit,
+            iterations=args.iterations,
+            enable_profiling=args.enable_profiling
+        )
+        synchronize()
 
 
 
