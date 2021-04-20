@@ -32,26 +32,29 @@ def compute_on_dataset(model, data_loader, device, bbox_aug, timer=None, bf16=Fa
                     print(trace_graph)
                     break
     # Inference
+    iters = 0
     print("runing inference step")
     for i, batch in enumerate(tqdm(data_loader)):
         images, targets, image_ids = batch
-        with torch.no_grad():
-            if timer:
-                timer.tic()
-            if bbox_aug:
-                output = im_detect_bbox_aug(model, images, device)
-            else:
-                output = model(images.to(memory_format=torch.channels_last), bf16=bf16)
-            if timer:
-                if not device.type == 'cpu':
-                    torch.cuda.synchronize()
-                timer.toc()
-            output = [o.to(cpu_device) for o in output]
-        results_dict.update(
-            {img_id: result for img_id, result in zip(image_ids, output)}
-        )
-        if i == iterations:
-            break
+        if images.tensors[0].size() == torch.Size([3, 800, 1088]):
+            with torch.no_grad():
+                if timer:
+                    timer.tic()
+                if bbox_aug:
+                    output = im_detect_bbox_aug(model, images, device)
+                else:
+                    output = model(images.to(memory_format=torch.channels_last), bf16=bf16)
+                if timer:
+                    if not device.type == 'cpu':
+                        torch.cuda.synchronize()
+                    timer.toc()
+                output = [o.to(cpu_device) for o in output]
+            results_dict.update(
+                {img_id: result for img_id, result in zip(image_ids, output)}
+            )
+            iters = iters + 1
+            if iters == iterations:
+                break
     return results_dict
 
 
