@@ -43,7 +43,7 @@ for i in $(seq 1 $LAST_INSTANCE); do
     LOG_i=inference_cpu_ins${i}.txt
 
     echo "### running on instance $i, numa node $numa_node_i, core list {$start_core_i, $end_core_i}..."
-    numactl --physcpubind=$start_core_i-$end_core_i --membind=$numa_node_i python tools/test_net.py $ARGS -i 200 --config-file "configs/e2e_mask_rcnn_R_50_FPN_1x_coco2017_inf.yaml" \
+    numactl --physcpubind=$start_core_i-$end_core_i --membind=$numa_node_i python tools/test_net.py $ARGS --enable-profiling -i 200 --config-file "configs/e2e_mask_rcnn_R_50_FPN_1x_coco2017_inf.yaml" \
         TEST.IMS_PER_BATCH 1 MODEL.DEVICE cpu 2>&1 | tee $LOG_i &
 done
 
@@ -53,5 +53,5 @@ end_core_0=`expr $CORES_PER_INSTANCE - 1`
 LOG_0=inference_cpu_ins0.txt
 
 echo "### running on instance 0, numa node $numa_node_0, core list {$start_core_0, $end_core_0}...\n\n"
-numactl --physcpubind=$start_core_0-$end_core_0 --membind=$numa_node_0 python tools/test_net.py $ARGS -i 200 --config-file "configs/e2e_mask_rcnn_R_50_FPN_1x_coco2017_inf.yaml" \
+numactl --physcpubind=$start_core_0-$end_core_0 --membind=$numa_node_0 python tools/test_net.py $ARGS --enable-profiling -i 200 --config-file "configs/e2e_mask_rcnn_R_50_FPN_1x_coco2017_inf.yaml" \
     TEST.IMS_PER_BATCH 1 MODEL.DEVICE cpu 2>&1 | tee $LOG_0

@@ -33,26 +33,29 @@ def compute_on_dataset(model, data_loader, device, bbox_aug, timer=None, bf16=Fa
                     break
     # Inference
     print("runing inference step")
-    with torch.autograd.profiler.profile(enable_profiling) as prof:
-        for i, batch in enumerate(tqdm(data_loader)):
-            images, targets, image_ids = batch
-            with torch.no_grad():
-                if timer:
-                    timer.tic()
-                if bbox_aug:
-                    output = im_detect_bbox_aug(model, images, device)
-                else:
+    s=0
+    for i, batch in enumerate(tqdm(data_loader)):
+        if images.tensors[0].size() == torch.Size([3, 800, 1088]):
+            s = s + 1
+        images, targets, image_ids = batch
+        with torch.no_grad():
+            if timer:
+                timer.tic()
+            if bbox_aug:
+                output = im_detect_bbox_aug(model, images, device)
+            else:
+                with torch.autograd.profiler.profile(enabled=True if s == 50 and enable_profiling else False) as prof:
                     output = model(images.to(memory_format=torch.channels_last), bf16=bf16)
-                if timer:
-                    if not device.type == 'cpu':
-                        torch.cuda.synchronize()
-                    timer.toc()
-                output = [o.to(cpu_device) for o in output]
-            results_dict.update(
-                {img_id: result for img_id, result in zip(image_ids, output)}
-            )
-            if i == iterations:
-                break
+            if timer:
+                if not device.type == 'cpu':
+                    torch.cuda.synchronize()
+                timer.toc()
+            output = [o.to(cpu_device) for o in output]
+        results_dict.update(
+            {img_id: result for img_id, result in zip(image_ids, output)}
+        )
+        if s == 50:
+            break
     if enable_profiling:
         print(prof.key_averages().table(sort_by="cpu_time_total"))
     return results_dict
