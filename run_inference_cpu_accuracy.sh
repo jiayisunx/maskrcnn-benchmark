@@ -10,6 +10,18 @@ then
     echo "### running bf16 datatype"
 fi
 
+if [[ "$1" == "int8" ]]
+then
+    ARGS="$ARGS --int8 --configure-dir configure_maskrcnn_0.3768.json"
+    echo "### running int8 datatype"
+fi
+
+if [[ "$1" == "calibration" ]]
+then
+    ARGS="$ARGS --calibration --int8 --iter-calib 100"
+    echo "### running calibration"
+fi
+
 if [[ "$2" == "jit" ]]
 then
     ARGS="$ARGS --jit"
@@ -31,5 +43,5 @@ sleep 3
 
 ### inference ###
 export TRAIN=0
-time python tools/test_net.py $ARGS --config-file "configs/e2e_mask_rcnn_R_50_FPN_1x_coco2017_inf.yaml" TEST.IMS_PER_BATCH 1 MODEL.DEVICE cpu
+time python tools/test_net.py -i 100 $ARGS --config-file "configs/e2e_mask_rcnn_R_50_FPN_1x_coco2017_inf.yaml" TEST.IMS_PER_BATCH 1 MODEL.DEVICE cpu
 

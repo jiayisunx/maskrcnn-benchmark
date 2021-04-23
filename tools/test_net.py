@@ -46,10 +46,18 @@ def main():
     )
     parser.add_argument('--bf16', action='store_true', default=False,
                         help='enable BF16 by IPEX autocast')
+    parser.add_argument('--int8', action='store_true', default=False,
+                        help='enable INT8 by IPEX autocast')
     parser.add_argument('--jit', action='store_true', default=False,
                         help='enable IPEX JIT path')
+    parser.add_argument('--calibration', action='store_true', default=False,
+                        help='doing int8 calibration step')
+    parser.add_argument('--configure-dir', default='configure.json', type=str, metavar='PATH',
+                        help = 'path to int8 configures, default file name is configure.json')
     parser.add_argument('-i', '--iterations', default=-1, type=int, metavar='N',
                         help='number of total iterations to run')
+    parser.add_argument('--iter-calib', default=-1, type=int, metavar='N',
+                        help='number of iterations when calibration to run')
     parser.add_argument("--enable-profiling", action="store_true", default=False)
 
     args = parser.parse_args()
@@ -115,8 +123,12 @@ def main():
                 expected_results_sigma_tol=cfg.TEST.EXPECTED_RESULTS_SIGMA_TOL,
                 output_folder=output_folder,
                 bf16=args.bf16,
+                int8=args.int8,
                 jit=args.jit,
-                iterations=args.iterations
+                calibration=args.calibration,
+                configure_dir=args.configure_dir,
+                iterations=args.iterations,
+                iter_calib=args.iter_calib
             )
             synchronize()
     if args.enable_profiling:

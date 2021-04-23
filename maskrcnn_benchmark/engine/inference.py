@@ -13,24 +13,53 @@ from ..utils.comm import synchronize
 from ..utils.timer import Timer, get_time_str
 from .bbox_aug import im_detect_bbox_aug
 import intel_pytorch_extension as ipex
+# from maskrcnn_benchmark.engine.utils_vis import draw, make_dot
 
 
-def compute_on_dataset(model, data_loader, device, bbox_aug, timer=None, bf16=False, jit=False, iterations=-1):
+def compute_on_dataset(model, data_loader, device, bbox_aug, timer=None, bf16=False, int8=False, jit=False, calibration=False, configure_dir='configure.json', iterations=-1, iter_calib=-1):
     model.eval()
     results_dict = {}
     cpu_device = torch.device("cpu")
-    model = model.to(memory_format=torch.channels_last)
-    with ipex.amp.autocast(enabled=bf16, configure=ipex.conf.AmpConf(torch.bfloat16)):
+    if int8:
+        ipex.core.disable_jit_opt()
+        with torch.no_grad():
+            model.backbone.body = ipex.fx.conv_bn_fuse(model.backbone.body)
+    else:
+        model = model.to(memory_format=torch.channels_last)
+    with ipex.amp.autocast(enabled=bf16, configure=ipex.conf.AmpConf(torch.bfloat16)), torch.no_grad():
+        # Int8 Calibration
+        if calibration:
+            print("running int8 calibration step")
+            conf = ipex.AmpConf(torch.int8)
+            for i, batch in enumerate(tqdm(data_loader)):
+                images, targets, image_ids = batch
+                with ipex.amp.calibrate():
+                    output = model.backbone.body(images.tensors)
+                if iter_calib != -1 and i == iter_calib:
+                    break
+            conf.save(configure_dir)
+        if int8:
+            print("generate trace model for int8")
+            conf = ipex.AmpConf(torch.int8, configure_dir)
+            for i, batch in enumerate(tqdm(data_loader)):
+                images, targets, image_ids = batch
+                with ipex.amp.autocast(enabled=True, configure=conf):
+                    model.backbone.body = torch.jit.trace(model.backbone.body, images.tensors, check_trace=False)
+                model.backbone.body = torch.jit._recursive.wrap_cpp_module(torch._C._freeze_module(model.backbone.body._c, preserveParameters=True))
+                print(model.backbone.body.graph)
+                # draw(model.backbone.body.graph).render("mask")
+                ipex.core._jit_llga_fuser(model.backbone.body.graph)
+                print(model.backbone.body.graph)
+                break
         # generate trace model
         if jit:
             print("generate trace model")
             for i, batch in enumerate(tqdm(data_loader)):
                 images, targets, image_ids = batch
-                with torch.no_grad():
-                    model.backbone = torch.jit.trace(model.backbone, images.tensors.to(memory_format=torch.channels_last))
-                    trace_graph = model.backbone.graph_for(images.tensors.to(memory_format=torch.channels_last))
-                    print(trace_graph)
-                    break
+                model.backbone = torch.jit.trace(model.backbone, images.tensors.to(memory_format=torch.channels_last))
+                trace_graph = model.backbone.graph_for(images.tensors.to(memory_format=torch.channels_last))
+                print(trace_graph)
+                break
     # Inference
     print("runing inference step")
     for i, batch in enumerate(tqdm(data_loader)):
@@ -41,7 +70,10 @@ def compute_on_dataset(model, data_loader, device, bbox_aug, timer=None, bf16=Fa
             if bbox_aug:
                 output = im_detect_bbox_aug(model, images, device)
             else:
-                output = model(images.to(memory_format=torch.channels_last), bf16=bf16)
+                if int8:
+                    output = model(images)
+                else:
+                    output = model(images.to(memory_format=torch.channels_last), bf16=bf16)
             if timer:
                 if not device.type == 'cpu':
                     torch.cuda.synchronize()
@@ -89,8 +121,12 @@ def inference(
         expected_results_sigma_tol=4,
         output_folder=None,
         bf16=False,
+        int8=False,
         jit=False,
-        iterations=-1
+        calibration=False,
+        configure_dir='configure.json',
+        iterations=-1,
+        iter_calib=-1
 ):
     # convert to a torch.device for efficiency
     device = torch.device(device)
@@ -101,7 +137,7 @@ def inference(
     total_timer = Timer()
     inference_timer = Timer()
     total_timer.tic()
-    predictions = compute_on_dataset(model, data_loader, device, bbox_aug, inference_timer, bf16, jit, iterations)
+    predictions = compute_on_dataset(model, data_loader, device, bbox_aug, inference_timer, bf16, int8, jit, calibration, configure_dir, iterations, iter_calib)
     # wait for all processes to complete before measuring the time
     synchronize()
     total_time = total_timer.toc()
